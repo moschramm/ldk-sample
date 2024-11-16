@@ -8,13 +8,31 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lightning = { version = "0.0.125", features = ["max_level_trace"] }
-lightning-block-sync = { version = "0.0.125", features = [ "rpc-client", "tokio" ] }
-lightning-invoice = { version = "0.32.0" }
-lightning-net-tokio = { version = "0.0.125" }
-lightning-persister = { version = "0.0.125" }
-lightning-background-processor = { version = "0.0.125", features = [ "futures" ] }
-lightning-rapid-gossip-sync = { version = "0.0.125" }
+# lightning = { version = "0.0.125", features = ["max_level_trace"] }
+# lightning-block-sync = { version = "0.0.125", features = [
+#     "rpc-client",
+#     "tokio",
+# ] }
+# lightning-invoice = { version = "0.32.0" }
+# lightning-net-tokio = { version = "0.0.125" }
+# lightning-persister = { version = "0.0.125" }
+# lightning-background-processor = { version = "0.0.125", features = ["futures"] }
+# lightning-rapid-gossip-sync = { version = "0.0.125" }
+
+lightning = { path = "../rust-lightning/lightning", features = [
+    "max_level_trace",
+] }
+lightning-block-sync = { path = "../rust-lightning/lightning-block-sync", features = [
+    "rpc-client",
+    "tokio",
+] }
+lightning-invoice = { path = "../rust-lightning/lightning-invoice" }
+lightning-net-tokio = { path = "../rust-lightning/lightning-net-tokio" }
+lightning-persister = { path = "../rust-lightning/lightning-persister" }
+lightning-background-processor = { path = "../rust-lightning/lightning-background-processor", features = [
+    "futures",
+] }
+lightning-rapid-gossip-sync = { path = "../rust-lightning/lightning-rapid-gossip-sync" }
 
 base64 = "0.13.0"
 bitcoin = "0.32"
@@ -25,7 +43,15 @@ libc = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rand = "0.4"
 serde_json = { version = "1.0" }
-tokio = { version = "1", features = [ "io-util", "macros", "rt", "rt-multi-thread", "sync", "net", "time" ] }
+tokio = { version = "1", features = [
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "net",
+    "time",
+] }
 
 [profile.release]
 panic = "abort"
