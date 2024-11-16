@@ -12,3 +12,13 @@ Cargo.lock
 
 # RPC auth
 .env
+
+# Directory for saving traces and additional logging
+/traces/
+
+# Directories keeping node state data
+/storage1/
+/storage2/
+
+# Generated for dev environment
+/.direnv/
