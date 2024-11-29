@@ -481,6 +481,32 @@ pub(crate) fn poll_for_user_input(
 					);
 				},
 				"quit" | "exit" => break,
+				"sendpadding" => {
+					let peer_pubkey = words.next();
+					if peer_pubkey.is_none() {
+						println!("ERROR: sendpadding requires peer public key: `sendpadding <peer_pubkey>`");
+						continue;
+					}
+
+					let peer_pubkey =
+						match bitcoin::secp256k1::PublicKey::from_str(peer_pubkey.unwrap()) {
+							Ok(pubkey) => pubkey,
+							Err(e) => {
+								println!("ERROR: {}", e.to_string());
+								continue;
+							},
+						};
+
+					if do_send_padding_message(
+						peer_pubkey,
+						peer_manager.clone(),
+						channel_manager.clone(),
+					)
+					.is_ok()
+					{
+						println!("SUCCESS: sent padding message to peer {}", peer_pubkey);
+					}
+				},
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
 		}
@@ -516,6 +542,7 @@ fn help() {
 	println!("\n  Other:");
 	println!("      signmessage <message>");
 	println!("      nodeinfo");
+	println!("      sendpadding <peer_pubkey>");
 }
 
 fn node_info(
@@ -941,4 +968,18 @@ pub(crate) fn parse_peer_info(
 	}
 
 	Ok((pubkey.unwrap(), peer_addr.unwrap().unwrap()))
+}
+
+fn do_send_padding_message(
+	pubkey: bitcoin::secp256k1::PublicKey, peer_manager: Arc<PeerManager>,
+	channel_manager: Arc<ChannelManager>,
+) -> Result<(), ()> {
+	//check the pubkey matches a valid connected peer
+	if peer_manager.peer_by_node_id(&pubkey).is_none() {
+		println!("Error: Could not find peer {}", pubkey);
+		return Err(());
+	}
+
+	channel_manager.send_padding_message(&pubkey);
+	Ok(())
 }
