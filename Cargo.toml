@@ -19,6 +19,8 @@ edition = "2018"
 # lightning-background-processor = { version = "0.0.125", features = ["futures"] }
 # lightning-rapid-gossip-sync = { version = "0.0.125" }
 
+maybenot = "2.0.1"
+
 lightning = { path = "../rust-lightning/lightning", features = [
     "max_level_trace",
 ] }
