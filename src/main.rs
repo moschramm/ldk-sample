@@ -2,6 +2,7 @@ mod args;
 pub mod bitcoind_client;
 mod cli;
 mod convert;
+mod defense_listener;
 mod disk;
 mod hex_utils;
 mod sweep;
@@ -14,7 +15,9 @@ use bitcoin::io;
 use bitcoin::network::Network;
 use bitcoin::BlockHash;
 use bitcoin_bech32::WitnessProgram;
+use defense_listener::event_loop;
 use disk::{INBOUND_PAYMENTS_FNAME, OUTBOUND_PAYMENTS_FNAME};
+use event_listener::Event as DefenseEvent;
 use lightning::chain::{chainmonitor, ChannelMonitorUpdateStatus};
 use lightning::chain::{BestBlock, Filter, Watch};
 use lightning::events::bump_transaction::{BumpTransactionEventHandler, Wallet};
@@ -48,7 +51,9 @@ use lightning_block_sync::SpvClient;
 use lightning_block_sync::UnboundedCache;
 use lightning_net_tokio::SocketDescriptor;
 use lightning_persister::fs_store::FilesystemStore;
+use maybenot::TriggerEvent;
 use rand::{thread_rng, Rng};
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -58,7 +63,6 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::net::ToSocketAddrs;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
@@ -467,7 +471,7 @@ async fn handle_ldk_events(
 			let forwarding_channel_manager = channel_manager.clone();
 			let min = time_forwardable.as_millis() as u64;
 			tokio::spawn(async move {
-				let millis_to_sleep = thread_rng().gen_range(min, min * 5) as u64;
+				let millis_to_sleep = thread_rng().gen_range(min..min * 5) as u64;
 				tokio::time::sleep(Duration::from_millis(millis_to_sleep)).await;
 				forwarding_channel_manager.process_pending_htlc_forwards();
 			});
@@ -618,7 +622,7 @@ async fn start_ldk() {
 		key
 	} else {
 		let mut key = [0; 32];
-		thread_rng().fill_bytes(&mut key);
+		thread_rng().fill(&mut key);
 		match File::create(keys_seed_path.clone()) {
 			Ok(mut f) => {
 				std::io::Write::write_all(&mut f, &key)
@@ -850,7 +854,7 @@ async fn start_ldk() {
 	));
 	let mut ephemeral_bytes = [0; 32];
 	let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-	rand::thread_rng().fill_bytes(&mut ephemeral_bytes);
+	rand::thread_rng().fill(&mut ephemeral_bytes);
 	let lightning_msg_handler = MessageHandler {
 		chan_handler: channel_manager.clone(),
 		route_handler: gossip_sync.clone(),
@@ -1092,10 +1096,6 @@ async fn start_ldk() {
 		Arc::clone(&output_sweeper),
 	));
 
-	let maybenot_peer_manager = Arc::clone(&peer_manager);
-	let maybenot_channel_manager = Arc::clone(&channel_manager);
-	tokio::spawn(maybenot_loop(maybenot_peer_manager, maybenot_channel_manager));
-
 	// Start the CLI.
 	let cli_channel_manager = Arc::clone(&channel_manager);
 	let cli_chain_monitor = Arc::clone(&chain_monitor);
@@ -1117,6 +1117,19 @@ async fn start_ldk() {
 			cli_persister,
 		)
 	});
+
+	let event = Arc::new(DefenseEvent::new());
+	let mut event_buffer =
+		ConstGenericRingBuffer::<TriggerEvent, { defense_listener::EVENTS_CAPACITY }>::new();
+	event_buffer.push(TriggerEvent::NormalSent);
+	let maybenot_peer_manager = Arc::clone(&peer_manager);
+	let maybenot_channel_manager = Arc::clone(&channel_manager);
+	tokio::spawn(event_loop(
+		maybenot_peer_manager,
+		maybenot_channel_manager,
+		event_buffer,
+		event.clone(),
+	));
 
 	// Exit if either CLI polling exits or the background processor exits (which shouldn't happen
 	// unless we fail to write to the filesystem).
@@ -1161,39 +1174,19 @@ async fn start_ldk() {
 		background_processor.await.unwrap().unwrap();
 	}
 
-	fn do_send_padding_message(
-		pubkey: bitcoin::secp256k1::PublicKey, peer_manager: Arc<PeerManager>,
-		channel_manager: Arc<ChannelManager>,
-	) -> Result<(), ()> {
-		//check the pubkey matches a valid connected peer
-		if peer_manager.peer_by_node_id(&pubkey).is_none() {
-			println!("Error: Could not find peer {}", pubkey);
-			return Err(());
-		}
+	// fn do_send_padding_message(
+	// 	pubkey: bitcoin::secp256k1::PublicKey, peer_manager: Arc<PeerManager>,
+	// 	channel_manager: Arc<ChannelManager>,
+	// ) -> Result<(), ()> {
+	// 	//check the pubkey matches a valid connected peer
+	// 	if peer_manager.peer_by_node_id(&pubkey).is_none() {
+	// 		println!("Error: Could not find peer {}", pubkey);
+	// 		return Err(());
+	// 	}
 
-		channel_manager.send_padding_message(&pubkey);
-		Ok(())
-	}
-
-	async fn maybenot_loop(peer_manager: Arc<PeerManager>, channel_manager: Arc<ChannelManager>) {
-		let peer_pubkey = "0296a55b43139bace6217bac4b68f852f302760b3cf338fbbb573fce5af4ed09cb";
-		let peer_pubkey = match bitcoin::secp256k1::PublicKey::from_str(peer_pubkey) {
-			Ok(pubkey) => pubkey,
-			Err(e) => {
-				println!("ERROR: {}", e.to_string());
-				return;
-			},
-		};
-		loop {
-			tokio::time::sleep(Duration::from_secs(10)).await;
-
-			if do_send_padding_message(peer_pubkey, peer_manager.clone(), channel_manager.clone())
-				.is_ok()
-			{
-				println!("SUCCESS: sent padding message to peer {}", peer_pubkey);
-			}
-		}
-	}
+	// 	channel_manager.send_padding_message(&pubkey);
+	// 	Ok(())
+	// }
 }
 
 #[tokio::main]

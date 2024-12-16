@@ -981,5 +981,6 @@ fn do_send_padding_message(
 	}
 
 	channel_manager.send_padding_message(&pubkey);
+	peer_manager.process_events();
 	Ok(())
 }
