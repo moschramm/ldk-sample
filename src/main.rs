@@ -2,9 +2,9 @@ mod args;
 pub mod bitcoind_client;
 mod cli;
 mod convert;
-mod defense_listener;
 mod disk;
 mod hex_utils;
+mod maybenot_defense;
 mod sweep;
 
 use crate::bitcoind_client::BitcoindClient;
@@ -15,9 +15,7 @@ use bitcoin::io;
 use bitcoin::network::Network;
 use bitcoin::BlockHash;
 use bitcoin_bech32::WitnessProgram;
-use defense_listener::event_loop;
 use disk::{INBOUND_PAYMENTS_FNAME, OUTBOUND_PAYMENTS_FNAME};
-use event_listener::Event as DefenseEvent;
 use lightning::chain::{chainmonitor, ChannelMonitorUpdateStatus};
 use lightning::chain::{BestBlock, Filter, Watch};
 use lightning::events::bump_transaction::{BumpTransactionEventHandler, Wallet};
@@ -51,9 +49,8 @@ use lightning_block_sync::SpvClient;
 use lightning_block_sync::UnboundedCache;
 use lightning_net_tokio::SocketDescriptor;
 use lightning_persister::fs_store::FilesystemStore;
-use maybenot::TriggerEvent;
+use maybenot_defense::{Machinist, Session};
 use rand::{thread_rng, Rng};
-use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -62,7 +59,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::net::ToSocketAddrs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
@@ -1118,18 +1115,14 @@ async fn start_ldk() {
 		)
 	});
 
-	let event = Arc::new(DefenseEvent::new());
-	let mut event_buffer =
-		ConstGenericRingBuffer::<TriggerEvent, { defense_listener::EVENTS_CAPACITY }>::new();
-	event_buffer.push(TriggerEvent::NormalSent);
-	let maybenot_peer_manager = Arc::clone(&peer_manager);
-	let maybenot_channel_manager = Arc::clone(&channel_manager);
-	tokio::spawn(event_loop(
-		maybenot_peer_manager,
-		maybenot_channel_manager,
-		event_buffer,
-		event.clone(),
-	));
+	// Load and spawn Maybenot defense
+	let resource_dir = std::env::var("CARGO_MANIFEST_DIR")
+		.map(PathBuf::from)
+		.expect("CARGO_MANIFEST_DIR env var not set")
+		.join("maybenot_machines");
+	let session = Session::new(Arc::clone(&channel_manager));
+	// TODO: use `is_finished` on join handle to check if thread has finished -> exit
+	let _machinist = Machinist::spawn(&resource_dir, session.unwrap());
 
 	// Exit if either CLI polling exits or the background processor exits (which shouldn't happen
 	// unless we fail to write to the filesystem).
@@ -1173,20 +1166,6 @@ async fn start_ldk() {
 		bp_exit.send(()).unwrap();
 		background_processor.await.unwrap().unwrap();
 	}
-
-	// fn do_send_padding_message(
-	// 	pubkey: bitcoin::secp256k1::PublicKey, peer_manager: Arc<PeerManager>,
-	// 	channel_manager: Arc<ChannelManager>,
-	// ) -> Result<(), ()> {
-	// 	//check the pubkey matches a valid connected peer
-	// 	if peer_manager.peer_by_node_id(&pubkey).is_none() {
-	// 		println!("Error: Could not find peer {}", pubkey);
-	// 		return Err(());
-	// 	}
-
-	// 	channel_manager.send_padding_message(&pubkey);
-	// 	Ok(())
-	// }
 }
 
 #[tokio::main]

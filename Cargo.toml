@@ -8,26 +8,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# lightning = { version = "0.0.125", features = ["max_level_trace"] }
-# lightning-block-sync = { version = "0.0.125", features = [
-#     "rpc-client",
-#     "tokio",
-# ] }
-# lightning-invoice = { version = "0.32.0" }
-# lightning-net-tokio = { version = "0.0.125" }
-# lightning-persister = { version = "0.0.125" }
-# lightning-background-processor = { version = "0.0.125", features = ["futures"] }
-# lightning-rapid-gossip-sync = { version = "0.0.125" }
-
-# dependencies for defense
-# maybenot = "2.0.1"
-# once_cell = "1.16"
-# rand_chacha = "0.3.1"
-# thiserror = "1.0.57"
-# log = "0.4"
+# dependencies for maybenot defense
+maybenot = "2.0.1"
+once_cell = "1.16"
+rand_chacha = "0.3.1"
+thiserror = "1.0.57"
+log = "0.4"
+nfq = "0.2.5"
 
 # dependencies for defense-listener
-maybenot = { path = "../../thesis/maybenot/crates/maybenot" }
 event-listener = "5.3.1"
 ringbuffer = "0.15.0"
 

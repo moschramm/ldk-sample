@@ -974,13 +974,13 @@ fn do_send_padding_message(
 	pubkey: bitcoin::secp256k1::PublicKey, peer_manager: Arc<PeerManager>,
 	channel_manager: Arc<ChannelManager>,
 ) -> Result<(), ()> {
-	//check the pubkey matches a valid connected peer
+	// check that the pubkey matches a valid connected peer
 	if peer_manager.peer_by_node_id(&pubkey).is_none() {
 		println!("Error: Could not find peer {}", pubkey);
 		return Err(());
 	}
 
-	channel_manager.send_padding_message(&pubkey);
+	_ = channel_manager.send_padding_message(&pubkey);
 	peer_manager.process_events();
 	Ok(())
 }
